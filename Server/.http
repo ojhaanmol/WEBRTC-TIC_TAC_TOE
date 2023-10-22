@@ -1,0 +1,10 @@
+post http://localhost:3000/createRequest
+Content-Type: application/json
+
+{"h":"a"}
+
+###
+post http://localhost:3000/join/0
+Content-Type: application/json
+
+{"h":"a"}

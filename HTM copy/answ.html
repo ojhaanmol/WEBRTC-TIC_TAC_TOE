@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Tic-Tac-Toe</title>
+    <style>
+        table {
+            border-collapse: collapse;
+            width: 300px;
+            height: 300px;
+            margin: 0 auto;
+        }
+
+        td {
+            width: 100px;
+            height: 100px;
+            text-align: center;
+            vertical-align: middle;
+            font-size: 24px;
+            border: 2px solid #000;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body onload="main()">
+    <button onclick="restart()">Restart</button>
+    <table>
+        <tr>
+            <td onclick="makeMove(this)" id="_1"></td>
+            <td onclick="makeMove(this)" id="_2"></td>
+            <td onclick="makeMove(this)" id="_3"></td>
+        </tr>
+        <tr>
+            <td onclick="makeMove(this)" id="_4"></td>
+            <td onclick="makeMove(this)" id="_5"></td>
+            <td onclick="makeMove(this)" id="_6"></td>
+        </tr>
+        <tr>
+            <td onclick="makeMove(this)" id="_7"></td>
+            <td onclick="makeMove(this)" id="_8"></td>
+            <td onclick="makeMove(this)" id="_9"></td>
+        </tr>
+    </table>
+
+    <script>
+        let dataChannel;
+        let currentPlayer = 'O';
+
+        const HOST = `192.168.239.106`;
+
+        const configuration = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                {
+                    urls: 'turn:turn.bistri.com:80',
+                    username: 'webrtc',
+                    credential: 'webrtc'
+                }
+            ]
+        };
+
+        function makeMove(cell) {
+            if (!cell.innerHTML) {
+                cell.innerHTML = currentPlayer;
+                currentPlayer = (currentPlayer === 'O') ? 'X' : 'O';
+                dataChannel.dc.send(cell.id)
+            }
+        };
+
+        function restart() {
+            for (let index = 1; index <= 9; index++) {
+                document.getElementById('_'+index).innerText = '';
+                currentPlayer = 'O'
+                dataChannel.dc.send('restart');
+            }
+        }
+
+        async function main(){
+            const id = await prompt('getOfferId');console.log(id);
+
+            let offer;
+
+            const headers = new Headers();
+            headers.append("Content-Type", "application/json");
+            const option = {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({id:offer})
+            };
+
+            await fetch(`http://${HOST}:3000/join/${id}`,option)
+            .then(response => response.json())
+            .then( json => { offer = json })
+            .catch( error => console.log(error));
+            
+            const lc = new RTCPeerConnection( configuration );
+
+            lc.ondatachannel = event => {
+                lc.dc = event.channel;
+                lc.dc.onmessage = event => {
+                    console.log(event.data);
+                    if (event.data === 'restart') {
+                        for (let index = 1; index <= 9; index++) 
+                            document.getElementById('_'+index).innerText = '';
+                        currentPlayer = 'O';
+                    } else {
+                        document.getElementById(event.data).innerText = 'X';
+                        currentPlayer = 'O';  
+                    }
+                };
+                lc.dc.onopen = event => console.log('Connection Open');
+            }
+
+            lc.onicecandidate = event => {
+                console.log(JSON.stringify(lc.localDescription));
+                const headers = new Headers();
+                headers.append("Content-Type", "application/json");
+                const option = {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify(lc.localDescription)
+                };
+                fetch(`http://${HOST}:3000/answer`,option)
+                .then(()=>console.log('done'))
+                .catch(error=>console.log(error));
+            };
+
+            await lc.setRemoteDescription( offer )
+            .then(()=> console.log('Offer Accepted'));
+
+            lc.createAnswer()
+            .then( rtcSessionDescription => lc.setLocalDescription( rtcSessionDescription ) )
+            .then( () => console.log('Answer Created'));
+
+            dataChannel = lc;
+        }
+    </script>
+</body>
+</html>
